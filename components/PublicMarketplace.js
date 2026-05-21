@@ -272,6 +272,7 @@ export default function PublicMarketplace({ session, profile, onOpenAuth, onOpen
           modelOpts={modelOpts}
           showFilters={showFilters} setShowFilters={setShowFilters}
           doSearch={() => doSearch(0)}
+          onAIParse={handleAIParse}
         />
       )}
 
@@ -599,10 +600,16 @@ function Hero({ f, up, setF, modelOpts, showFilters, setShowFilters, doSearch, o
 /* ════════════════════════════════════════════════════════════
    COMPACT SEARCH (after first search)
    ════════════════════════════════════════════════════════════ */
-function CompactSearch({ f, up, modelOpts, showFilters, setShowFilters, doSearch }) {
+function CompactSearch({ f, up, modelOpts, showFilters, setShowFilters, doSearch, onAIParse }) {
   return (
     <div style={{ background: '#fff', borderBottom: '1px solid var(--line-2)', boxShadow: 'var(--shadow-sm)' }}>
       <div style={{ maxWidth: 1240, margin: '0 auto', padding: '18px 24px' }}>
+        {/* AI Search at top */}
+        {onAIParse && (
+          <div style={{ marginBottom: 14 }}>
+            <CompactAISearch onParsed={onAIParse} />
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px 120px auto auto', gap: 10, alignItems: 'end' }}>
           <Sel label="Make" value={f.make} onChange={v => { up('make', v); up('model', '') }} opts={MAKES} ph="Any make"/>
           <Sel label="Model" value={f.model} onChange={v => up('model', v)} opts={modelOpts} ph={f.make ? 'Any model' : 'Pick make'} disabled={!f.make}/>
@@ -627,6 +634,40 @@ function CompactSearch({ f, up, modelOpts, showFilters, setShowFilters, doSearch
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/* Compact AI search bar - smaller version for results page */
+function CompactAISearch({ onParsed }) {
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    const query = q.trim()
+    if (!query || busy) return
+    setBusy(true)
+    try {
+      const r = await fetch('/api/ai-parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: query }) })
+      const d = await r.json()
+      if (d.filters) onParsed(d.filters, query)
+    } catch {}
+    setBusy(false); setQ('')
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bone)', borderRadius: 12, padding: '4px 4px 4px 14px', height: 48, border: '1px solid var(--line)' }}>
+      <Sparkles size={16} color="var(--crimson)" style={{ flexShrink: 0 }} />
+      <input
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && submit()}
+        placeholder="Or describe what you want — &quot;reliable SUV under $25K with low miles&quot;…"
+        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '0 12px', fontSize: 14, color: 'var(--ink)', minWidth: 0 }}
+      />
+      <button onClick={submit} disabled={!q.trim() || busy} style={{ height: 40, padding: '0 16px', background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: !q.trim() || busy ? 'not-allowed' : 'pointer', opacity: !q.trim() || busy ? .4 : 1, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        {busy ? 'Thinking…' : 'Ask AI'}
+      </button>
     </div>
   )
 }
