@@ -655,11 +655,22 @@ function CompactAISearch({ onParsed }) {
     const query = q.trim()
     if (!query || busy) return
     setBusy(true)
+
+    // Always parse client-side as baseline
+    const clientFilters = quickRegexParse(query)
+    let finalFilters = clientFilters
+
     try {
       const r = await fetch('/api/ai-parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: query }) })
       const d = await r.json()
-      if (d.filters) onParsed(d.filters, query)
+      if (d.filters && Object.keys(d.filters).length > 0) {
+        finalFilters = { ...clientFilters, ...d.filters }
+      }
     } catch {}
+
+    if (Object.keys(finalFilters).length > 0) {
+      onParsed(finalFilters, query)
+    }
     setBusy(false); setQ('')
   }
 
@@ -1200,4 +1211,65 @@ function Inp({ label, value, onChange, ph }) {
       <input className="input" value={value} onChange={e => onChange(e.target.value)} placeholder={ph}/>
     </div>
   )
+}
+
+/* Client-side regex parser - works as instant baseline before AI responds */
+function quickRegexParse(q) {
+  const text = q.toLowerCase()
+  const out = {}
+
+  const MAKES_MAP = {
+    'toyota': 'Toyota', 'honda': 'Honda', 'ford': 'Ford',
+    'chevy': 'Chevrolet', 'chevrolet': 'Chevrolet',
+    'bmw': 'BMW', 'tesla': 'Tesla', 'jeep': 'Jeep',
+    'hyundai': 'Hyundai', 'nissan': 'Nissan',
+    'mercedes': 'Mercedes-Benz', 'mercedes-benz': 'Mercedes-Benz', 'benz': 'Mercedes-Benz',
+    'audi': 'Audi', 'lexus': 'Lexus', 'kia': 'Kia',
+    'mazda': 'Mazda', 'subaru': 'Subaru', 'dodge': 'Dodge',
+    'ram': 'RAM', 'gmc': 'GMC', 'cadillac': 'Cadillac',
+    'volkswagen': 'Volkswagen', 'vw': 'Volkswagen',
+    'porsche': 'Porsche', 'volvo': 'Volvo', 'acura': 'Acura',
+    'infiniti': 'Infiniti', 'mini': 'Mini', 'jaguar': 'Jaguar',
+    'lincoln': 'Lincoln', 'buick': 'Buick', 'chrysler': 'Chrysler',
+    'mitsubishi': 'Mitsubishi', 'land rover': 'Land Rover',
+  }
+  for (const [k, v] of Object.entries(MAKES_MAP)) {
+    const re = new RegExp(`\\b${k.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i')
+    if (re.test(text)) { out.make = v; break }
+  }
+
+  const priceUnder = text.match(/under\s*\$?\s*(\d+)\s*(k|thousand)?/i)
+  if (priceUnder) {
+    const v = parseInt(priceUnder[1])
+    out.price_max = String(priceUnder[2] || v < 1000 ? v * 1000 : v)
+  }
+  const priceOver = text.match(/over\s*\$?\s*(\d+)\s*(k|thousand)?/i)
+  if (priceOver) {
+    const v = parseInt(priceOver[1])
+    out.price_min = String(priceOver[2] || v < 1000 ? v * 1000 : v)
+  }
+
+  if (/\bsuv\b/.test(text)) out.body_type = 'SUV'
+  else if (/\btruck\b|\bpickup\b/.test(text)) out.body_type = 'Truck'
+  else if (/\bsedan\b/.test(text)) out.body_type = 'Sedan'
+  else if (/\bcoupe\b/.test(text)) out.body_type = 'Coupe'
+  else if (/\bconvertible\b/.test(text)) out.body_type = 'Convertible'
+  else if (/\b(van|minivan)\b/.test(text)) out.body_type = 'Van'
+  else if (/\bhatchback\b/.test(text)) out.body_type = 'Hatchback'
+
+  if (/\b(electric|ev)\b/.test(text)) out.fuel_type = 'Electric'
+  else if (/\bhybrid\b/.test(text)) out.fuel_type = 'Hybrid'
+  else if (/\bdiesel\b/.test(text)) out.fuel_type = 'Diesel'
+
+  const milesUnder = text.match(/under\s*(\d+)\s*(k|thousand)?\s*miles?/i)
+  if (milesUnder) {
+    const v = parseInt(milesUnder[1])
+    out.miles_max = String(milesUnder[2] || v < 1000 ? v * 1000 : v)
+  }
+  if (/low\s*mile/.test(text) && !out.miles_max) out.miles_max = '50000'
+
+  const yearMatch = text.match(/\b(20\d{2})\b/)
+  if (yearMatch) out.year_min = yearMatch[1]
+
+  return out
 }
