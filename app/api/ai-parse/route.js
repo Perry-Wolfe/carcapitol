@@ -37,7 +37,6 @@ export async function POST(request) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    // No API key — return null and let client fallback handle it
     return NextResponse.json({ filters: null, fallback: true })
   }
 
