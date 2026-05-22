@@ -29,6 +29,11 @@ export default function AISearch({ onParsed, onOpenAuth }) {
     const query = (text || q).trim()
     if (!query) return
     setBusy(true); setError('')
+
+    // Always run client-side regex parse as a baseline
+    const clientFilters = clientFallbackParse(query)
+    let finalFilters = clientFilters
+
     try {
       const r = await fetch('/api/ai-parse', {
         method: 'POST',
@@ -36,16 +41,21 @@ export default function AISearch({ onParsed, onOpenAuth }) {
         body: JSON.stringify({ q: query }),
       })
       const d = await r.json()
-      if (d.filters) {
-        onParsed(d.filters, query)
-      } else {
-        setError('Sorry, I couldn\'t understand that. Try something like "Honda under $20K".')
+      // Merge AI filters on top of client filters - AI is generally more accurate when it returns something
+      if (d.filters && Object.keys(d.filters).length > 0) {
+        finalFilters = { ...clientFilters, ...d.filters }
       }
     } catch (e) {
-      // Fallback: regex parse client-side so AI search still works even if API fails
-      const filters = clientFallbackParse(query)
-      onParsed(filters, query)
+      // Network failure - use client filters only
     }
+
+    if (Object.keys(finalFilters).length === 0) {
+      setError('Sorry, I couldn\'t understand that. Try something like "Honda under $20K".')
+      setBusy(false)
+      return
+    }
+
+    onParsed(finalFilters, query)
     setBusy(false)
   }
 
